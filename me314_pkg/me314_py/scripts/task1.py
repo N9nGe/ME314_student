@@ -3,15 +3,18 @@
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Pose
-from std_msgs.msg import Float64
+from std_msgs.msg import Float64, Image
+from cv_bridge import CvBridge
+import cv2
 
 # Import the command queue message types from the reference code
 from me314_msgs.msg import CommandQueue, CommandWrapper
 
+# color image topic color/image_raw
 
-class Example(Node):
+class PickPlace(Node):
     def __init__(self):
-        super().__init__('example_node')
+        super().__init__('PickPlace')
         
         # Replace the direct publishers with the command queue publisher
         self.command_queue_pub = self.create_publisher(CommandQueue, '/me314_xarm_command_queue', 10)
@@ -23,11 +26,19 @@ class Example(Node):
         self.current_gripper_position = None
         self.gripper_status_sub = self.create_subscription(Float64, '/me314_xarm_gripper_position', self.gripper_position_callback, 10)
 
+        # image subscriber
+        self.subscription = self.create_subscription(Image,'/color/image_raw', self.color_image_callback, 10)
+        self.bridge = CvBridge()
+
     def arm_pose_callback(self, msg: Pose):
         self.current_arm_pose = msg
 
     def gripper_position_callback(self, msg: Float64):
         self.current_gripper_position = msg.data
+
+    def color_image_callback(self, msg: Image):
+        cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+        cv2.imshow("Image", cv_image)
 
     def publish_pose(self, pose_array: list):
         """
@@ -85,26 +96,27 @@ class Example(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    node = Example()
+    node = PickPlace()
+    
 
-    # Define poses using the array format [x, y, z, qx, qy, qz, qw]
-    p0 = [0.3408, 0.0021, 0.3029, 1.0, 0.0, 0.0, 0.0]
-    p1 = [p0[0], p0[1], 0.1, 1.0, 0.0, 0.0, 0.0]
+    # # Define poses using the array format [x, y, z, qx, qy, qz, qw]
+    # p0 = [0.3408, 0.0021, 0.3029, 1.0, 0.0, 0.0, 0.0]
+    # p1 = [p0[0], p0[1], 0.1, 1.0, 0.0, 0.0, 0.0]
 
-    poses = [p0, p1]
+    # poses = [p0, p1]
 
-    # Let's first open the gripper (0.0 to 1.0, where 0.0 is fully open and 1.0 is fully closed)
-    node.get_logger().info("Opening gripper...")
-    node.publish_gripper_position(0.0)
+    # # Let's first open the gripper (0.0 to 1.0, where 0.0 is fully open and 1.0 is fully closed)
+    # node.get_logger().info("Opening gripper...")
+    # node.publish_gripper_position(0.0)
 
-    # Move the arm to each pose
-    for i, pose in enumerate(poses):
-        node.get_logger().info(f"Publishing Pose {i+1}...")
-        node.publish_pose(pose)
+    # # Move the arm to each pose
+    # for i, pose in enumerate(poses):
+    #     node.get_logger().info(f"Publishing Pose {i+1}...")
+    #     node.publish_pose(pose)
 
-    # Now close the gripper.
-    node.get_logger().info("Closing gripper...")
-    node.publish_gripper_position(1.0)
+    # # Now close the gripper.
+    # node.get_logger().info("Closing gripper...")
+    # node.publish_gripper_position(1.0)
 
     node.get_logger().info("All actions done. Shutting down.")
 
