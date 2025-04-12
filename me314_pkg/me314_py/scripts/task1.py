@@ -3,9 +3,10 @@
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Pose
-from std_msgs.msg import Float64, Image
-from cv_bridge import CvBridge
+from std_msgs.msg import Float64
+from sensor_msgs.msg import Image
 import cv2
+import numpy as np
 
 # Import the command queue message types from the reference code
 from me314_msgs.msg import CommandQueue, CommandWrapper
@@ -27,8 +28,11 @@ class PickPlace(Node):
         self.gripper_status_sub = self.create_subscription(Float64, '/me314_xarm_gripper_position', self.gripper_position_callback, 10)
 
         # image subscriber
-        self.subscription = self.create_subscription(Image,'/color/image_raw', self.color_image_callback, 10)
-        self.bridge = CvBridge()
+        self.rgb_subscription = self.create_subscription(Image,'/color/image_raw', self.color_image_callback, 10)
+        self.depth_subscription = self.create_subscription(Image,'/aligned_depth_to_color/image_raw', self.depth_image_callback, 10)
+
+        self.rgb_image = None
+        self.depth_image = None
 
     def arm_pose_callback(self, msg: Pose):
         self.current_arm_pose = msg
@@ -37,8 +41,20 @@ class PickPlace(Node):
         self.current_gripper_position = msg.data
 
     def color_image_callback(self, msg: Image):
-        cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
-        cv2.imshow("Image", cv_image)
+        # encoding = rgb8
+        raw_image = np.frombuffer(msg.data, dtype=np.uint8).reshape((msg.height, msg.width, 3))
+        rgb_image = cv2.cvtColor(raw_image, cv2.COLOR_BGR2RGB)
+        # Save the image for testing
+        # cv2.imwrite('image_rgb.png', rgb_image)
+        self.rgb_image = rgb_image
+
+
+    def depth_image_callback(self, msg: Image):
+        depth_image = np.frombuffer(msg.data, dtype=np.uint16).reshape((msg.height, msg.width))
+        depth_image = cv2.normalize(depth_image, None, 0, 255, cv2.NORM_MINMAX)
+        depth_image = depth_image.astype(np.uint8)
+        self.depth_image = depth_image
+        # cv2.imwrite('depth_display.png', depth_display)
 
     def publish_pose(self, pose_array: list):
         """
@@ -98,7 +114,18 @@ def main(args=None):
     rclpy.init(args=args)
     node = PickPlace()
     
+    #TODO: test the color image first
+    node.get_logger().info("Opening gripper...")
+    node.publish_gripper_position(0.0)
+    p0 = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]
+    # TODO: Test the start pose of the robot arm
+    # node.get_logger().info(f"Publishing Pose {i+1}...")
+    node.publish_pose(p0)
 
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
     # # Define poses using the array format [x, y, z, qx, qy, qz, qw]
     # p0 = [0.3408, 0.0021, 0.3029, 1.0, 0.0, 0.0, 0.0]
     # p1 = [p0[0], p0[1], 0.1, 1.0, 0.0, 0.0, 0.0]
@@ -119,7 +146,6 @@ def main(args=None):
     # node.publish_gripper_position(1.0)
 
     node.get_logger().info("All actions done. Shutting down.")
-
     node.destroy_node()
     rclpy.shutdown()
 
