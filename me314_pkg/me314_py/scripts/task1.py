@@ -45,8 +45,23 @@ class PickPlace(Node):
         self.tf_listener = TransformListener(self.tf_buffer, self)
 
         self.target_pose = None
+        self.place_target_pose = None
         self.object_locked = False
-        self.origin_pose = [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0]  # Default origin pose
+        self.origin_pose = [0.15, 0.0, 0.25, 1.0, 0.0, 0.0, 0.0]  # Default origin pose
+
+        self.timer = self.create_timer(1.0, self.timer_callback)
+
+        self.task1_done = False
+
+    def timer_callback(self):
+        if not self.task1_done:
+            # if self.target_pose and self.place_target_pose and not self.object_locked:
+            if self.target_pose and not self.object_locked:
+                self.get_logger().info("Timer triggered pick-and-place.")
+                # self.execute_pick_and_place(self.target_pose, self.place_target_pose)
+                self.execute_pick_and_place(self.target_pose)
+                self.task1_done = True
+                self.object_locked = True
 
     def arm_pose_callback(self, msg: Pose):
         self.current_arm_pose = msg
@@ -60,7 +75,7 @@ class PickPlace(Node):
         # encoding = rgb8
         
         raw_image = np.frombuffer(msg.data, dtype=np.uint8).reshape((msg.height, msg.width, 3))
-        rgb_image = cv2.cvtColor(raw_image, cv2.COLOR_BGR2RGB)
+        # rgb_image = cv2.cvtColor(raw_image, cv2.COLOR_BGR2RGB)
         # Save the image for testing
         # cv2.imwrite('image_rgb.png', rgb_image)
 
@@ -103,11 +118,7 @@ class PickPlace(Node):
 
             if point_world is not None:
                 self.target_pose = [point_world[0], point_world[1], point_world[2], 1.0, 0.0, 0.0, 0.0]  
-                self.object_locked = True 
-                self.publish_pose(self.target_pose)
-                self.publish_gripper_position(1.0)  # Close the gripper
-                time.sleep(2.0)
-                self.publish_pose(self.origin_pose)
+                self.get_logger().info(f"Target pose calculated: {self.target_pose}")
                 
 
     def publish_pose(self, pose_array: list):
@@ -206,24 +217,50 @@ class PickPlace(Node):
         except Exception as e:
             self.get_logger().warn(f"TF transform failed: {str(e)}")
             return None
-    
+
+    # def execute_pick_and_place(self, pick_up_target_pose, place_target_pose):
+    #     self.publish_pose(pick_up_target_pose)
+    #     time.sleep(1.5)
+    #     self.publish_gripper_position(1.0)
+    #     time.sleep(1.0)
+    #     self.publish_pose(self.origin_pose)
+    #     time.sleep(1.0)
+    #     self.publish_pose(place_target_pose)
+    #     time.sleep(1.0)
+    #     self.publish_gripper_position(0.0)
+    #     time.sleep(1.0)
+    #     self.publish_pose(self.origin_pose)
+
+    def execute_pick_and_place(self, pick_up_target_pose):
+        self.publish_pose(pick_up_target_pose)
+        time.sleep(1.5)
+        self.publish_gripper_position(1.0)
+        time.sleep(1.0)
+        self.publish_pose(self.origin_pose)
+        # time.sleep(1.0)
+        # self.publish_pose(place_target_pose)
+        # time.sleep(1.0)
+        # self.publish_gripper_position(0.0)
+        # time.sleep(1.0)
+        # self.publish_pose(self.origin_pose)
+
 def main(args=None):
     rclpy.init(args=args)
     node = PickPlace()
 
-    # try:
-    #     rclpy.spin(node)
-    # except KeyboardInterrupt:
-    #     pass
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
 
     # Define poses using the array format [x, y, z, qx, qy, qz, qw]
-    p0 = [0.35442898432566816, 0.08758732426157431, 0.007964988540690887, 1.0, 0.0, 0.0, 0.0]
-    p1 = [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0]
+    # p0 = [0.35442898432566816, 0.08758732426157431, 0.007964988540690887, 1.0, 0.0, 0.0, 0.0]
+    # p1 = [0.15, 0.0, 0.25, 1.0, 0.0, 0.0, 0.0]
 
     # poses = [p0, p1]
-    node.publish_pose(p0)
-    node.publish_gripper_position(1.0)
-    node.publish_pose(p1)
+    # node.publish_pose(p0)
+    # node.publish_gripper_position(1.0)
+    # node.publish_pose(p1)
 
     # # Let's first open the gripper (0.0 to 1.0, where 0.0 is fully open and 1.0 is fully closed)
     # node.get_logger().info("Opening gripper...")
