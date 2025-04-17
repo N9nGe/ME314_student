@@ -36,6 +36,7 @@ class PickPlace(Node):
         self.depth_subscription = self.create_subscription(Image,'/aligned_depth_to_color/image_raw', self.depth_image_callback, 10)
 
         self.last_red_pixel = None
+        self.last_green_pixel = None
         self.fx = 640.5098266601562
         self.fy = 640.5098266601562
         self.cx = 640.0
@@ -44,7 +45,7 @@ class PickPlace(Node):
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
 
-        self.target_pose = None
+        self.pick_target_pose = None
         self.place_target_pose = None
         self.object_locked = False
         self.origin_pose = [0.15, 0.0, 0.25, 1.0, 0.0, 0.0, 0.0]  # Default origin pose
@@ -55,11 +56,9 @@ class PickPlace(Node):
 
     def timer_callback(self):
         if not self.task1_done:
-            # if self.target_pose and self.place_target_pose and not self.object_locked:
-            if self.target_pose and not self.object_locked:
+            if self.pick_target_pose and self.place_target_pose and not self.object_locked:
                 self.get_logger().info("Timer triggered pick-and-place.")
-                # self.execute_pick_and_place(self.target_pose, self.place_target_pose)
-                self.execute_pick_and_place(self.target_pose)
+                self.execute_pick_and_place(self.pick_target_pose, self.place_target_pose)
                 self.task1_done = True
                 self.object_locked = True
 
@@ -80,9 +79,9 @@ class PickPlace(Node):
         # cv2.imwrite('image_rgb.png', rgb_image)
 
         # get the center of the red box
-        center = self.red_box_segmentation(raw_image)
-        if center is not None:
-            cx, cy = center
+        red_center = self.color_box_segmentation(raw_image, 'red')
+        if red_center is not None:
+            cx, cy = red_center
             self.get_logger().info(f"Red object center: ({cx}, {cy})")
 
             # Test code
@@ -95,6 +94,12 @@ class PickPlace(Node):
         else:
             self.get_logger().info("Red object not found.")
 
+        green_center = self.color_box_segmentation(raw_image, 'green')
+        if green_center is not None:
+            cx, cy = green_center
+            self.get_logger().info(f"Green object center: ({cx}, {cy})")
+            self.last_green_pixel = (cx, cy)
+
 
     def depth_image_callback(self, msg: Image):
         if self.object_locked or self.last_red_pixel is None:
@@ -104,7 +109,7 @@ class PickPlace(Node):
         depth_image = cv2.normalize(depth_image_raw, None, 0, 255, cv2.NORM_MINMAX)
         depth_image = depth_image.astype(np.uint8)
         # cv2.imwrite('depth_display.png', depth_image)
-        if hasattr(self, 'last_red_pixel'):
+        if self.last_green_pixel is not None:
             u, v = self.last_red_pixel
             z_mm = depth_image_raw[v, u] 
 
@@ -117,9 +122,23 @@ class PickPlace(Node):
             point_world = self.transform_camera_to_world_tf(point_cam)
 
             if point_world is not None:
-                self.target_pose = [point_world[0], point_world[1], point_world[2], 1.0, 0.0, 0.0, 0.0]  
-                self.get_logger().info(f"Target pose calculated: {self.target_pose}")
-                
+                self.pick_target_pose = [point_world[0], point_world[1], point_world[2], 1.0, 0.0, 0.0, 0.0]  
+                self.get_logger().info(f"Target pose calculated: {self.pick_target_pose}")
+        
+        if self.last_green_pixel is not None:
+            u, v = self.last_green_pixel
+            z_mm = depth_image_raw[v, u] 
+            if z_mm == 0:
+                self.get_logger().warn("Invalid depth at green object pixel.")
+                return
+            
+            x, y, z = self.pixel_to_camera_point(u, v, z_mm)
+            point_cam = [x, y, z]
+            point_world = self.transform_camera_to_world_tf(point_cam)
+            if point_world is not None:
+                # 0.05 is the offset of the green region
+                self.place_target_pose = [point_world[0], point_world[1], point_world[2]+0.03, 1.0, 0.0, 0.0, 0.0]  
+                self.get_logger().info(f"Target pose calculated: {self.place_target_pose}")
 
     def publish_pose(self, pose_array: list):
         """
@@ -174,20 +193,27 @@ class PickPlace(Node):
         
         self.get_logger().info(f"Published gripper command to queue: {gripper_pos:.2f}")
 
-    def red_box_segmentation(self, rgb_image):
-        # rgb mask
-        lower_red = np.array([150, 0, 0])
-        upper_red = np.array([255, 100, 100])
+    def color_box_segmentation(self, rgb_image, color='red'):
+        if color == 'red':
+            lower = np.array([150, 0, 0])
+            upper = np.array([255, 100, 100])
+            mask_name = "red_mask_rgb.png"
+        elif color == 'green':
+            lower = np.array([0, 150, 0])
+            upper = np.array([100, 255, 100])
+            mask_name = "green_mask_rgb.png"
+        else:
+            self.get_logger().warn(f"Unsupported color: {color}")
+            return None
 
-        red_mask = cv2.inRange(rgb_image, lower_red, upper_red)
-        cv2.imwrite("red_mask_rgb.png", red_mask)
-        # find the largest contour
-        contours, _ = cv2.findContours(red_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        mask = cv2.inRange(rgb_image, lower, upper)
+        cv2.imwrite(mask_name, mask)
+
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         if len(contours) == 0:
-            return None  # no red box found
-        largest_contour = max(contours, key=cv2.contourArea)
+            return None
 
-        # get the center of mass
+        largest_contour = max(contours, key=cv2.contourArea)
         M = cv2.moments(largest_contour)
         if M["m00"] == 0:
             return None
@@ -195,6 +221,7 @@ class PickPlace(Node):
         cx = int(M["m10"] / M["m00"])
         cy = int(M["m01"] / M["m00"])
         return (cx, cy)
+
     
     def pixel_to_camera_point(self, u, v, z_mm):
         z_m = z_mm / 1000.0  # mm -> m
@@ -218,31 +245,18 @@ class PickPlace(Node):
             self.get_logger().warn(f"TF transform failed: {str(e)}")
             return None
 
-    # def execute_pick_and_place(self, pick_up_target_pose, place_target_pose):
-    #     self.publish_pose(pick_up_target_pose)
-    #     time.sleep(1.5)
-    #     self.publish_gripper_position(1.0)
-    #     time.sleep(1.0)
-    #     self.publish_pose(self.origin_pose)
-    #     time.sleep(1.0)
-    #     self.publish_pose(place_target_pose)
-    #     time.sleep(1.0)
-    #     self.publish_gripper_position(0.0)
-    #     time.sleep(1.0)
-    #     self.publish_pose(self.origin_pose)
-
-    def execute_pick_and_place(self, pick_up_target_pose):
+    def execute_pick_and_place(self, pick_up_target_pose, place_target_pose):
         self.publish_pose(pick_up_target_pose)
-        time.sleep(1.5)
+        time.sleep(1.0)
         self.publish_gripper_position(1.0)
         time.sleep(1.0)
         self.publish_pose(self.origin_pose)
-        # time.sleep(1.0)
-        # self.publish_pose(place_target_pose)
-        # time.sleep(1.0)
-        # self.publish_gripper_position(0.0)
-        # time.sleep(1.0)
-        # self.publish_pose(self.origin_pose)
+        time.sleep(1.0)
+        self.publish_pose(place_target_pose)
+        time.sleep(1.0)
+        self.publish_gripper_position(0.0)
+        time.sleep(1.0)
+        self.publish_pose(self.origin_pose)
 
 def main(args=None):
     rclpy.init(args=args)
