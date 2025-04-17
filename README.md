@@ -100,7 +100,7 @@ sudo apt upgrade
 sudo apt install ros-humble-desktop
 ```
 
-#### Install Gazebo
+#### Install Gazebo/ROS2 Controllers
 
 ```bash
 sudo apt install gazebo
@@ -108,7 +108,9 @@ sudo apt install ros-humble-gazebo-ros-pkgs
 sudo apt install \
   ros-humble-gazebo-ros2-control \
   ros-humble-controller-manager \
-  ros-humble-ros2-control
+  ros-humble-ros2-control \
+  ros-humble-joint-state-broadcaster \
+  ros-humble-joint-trajectory-controller
 ```
 
 #### Install Realsense2 SDK and ROS2 Wrapper
@@ -148,7 +150,7 @@ mkdir -p xarm_ros2_ws/src
 
 ```bash
 cd ~/xarm_ros2_ws/src
-git clone https://github.com/RealSoloQ/xarm_ros2.git --recursive -b $ROS_DISTRO
+git clone https://github.com/Realexqiu/xarm_ros2.git --recursive -b $ROS_DISTRO
 rosdep update && rosdep install --from-paths . --ignore-src --rosdistro $ROS_DISTRO -y --skip-keys="roscpp catkin"
 cd ~/xarm_ros2_ws
 colcon build
