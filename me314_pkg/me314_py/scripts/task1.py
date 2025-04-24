@@ -14,6 +14,7 @@ from builtin_interfaces.msg import Time
 
 # Import the command queue message types from the reference code
 from me314_msgs.msg import CommandQueue, CommandWrapper
+Real = False
 
 # color image topic color/image_raw
 
@@ -261,6 +262,9 @@ class PickPlace(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = PickPlace()
+    p0 = [0.15, 0.0, 0.4, 1.0, 0.0, 0.0, 0.0]
+
+    node.publish_pose(p0)
 
     try:
         rclpy.spin(node)
