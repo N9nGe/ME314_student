@@ -6,7 +6,7 @@ import time
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Pose, PointStamped
-from std_msgs.msg import Float64
+from std_msgs.msg import Float64, Bool
 from sensor_msgs.msg import Image
 from tf2_ros import Buffer, TransformListener
 import tf2_geometry_msgs
@@ -14,7 +14,7 @@ from builtin_interfaces.msg import Time
 
 # Import the command queue message types from the reference code
 from me314_msgs.msg import CommandQueue, CommandWrapper
-Real = False
+Real = True
 
 # color image topic color/image_raw
 
@@ -32,10 +32,17 @@ class PickPlace(Node):
         self.current_gripper_position = None
         self.gripper_status_sub = self.create_subscription(Float64, '/me314_xarm_gripper_position', self.gripper_position_callback, 10)
 
-        # image subscriber
-        self.rgb_subscription = self.create_subscription(Image,'/color/image_raw', self.color_image_callback, 10)
-        self.depth_subscription = self.create_subscription(Image,'/aligned_depth_to_color/image_raw', self.depth_image_callback, 10)
+        self.arm_executing = False
+        self.arm_executing_sub = self.create_subscription(Bool, '/me314_xarm_is_executing', self.arm_executing_callback, 10)
 
+        # image subscriber
+        if Real == False:
+            self.rgb_subscription = self.create_subscription(Image,'/color/image_raw', self.color_image_callback, 10)
+            self.depth_subscription = self.create_subscription(Image,'/aligned_depth_to_color/image_raw', self.depth_image_callback, 10)
+        else:
+            self.rgb_subscription = self.create_subscription(Image,'/camera/realsense2_camera_node/color/image_raw', self.color_image_callback, 10)
+            self.depth_subscription = self.create_subscription(Image,'/camera/realsense2_camera_node/aligned_depth_to_color/image_raw', self.depth_image_callback, 10)
+            
         self.last_red_pixel = None
         self.last_green_pixel = None
         self.fx = 640.5098266601562
@@ -69,8 +76,11 @@ class PickPlace(Node):
     def gripper_position_callback(self, msg: Float64):
         self.current_gripper_position = msg.data
 
+    def arm_executing_callback(self, msg: Bool):
+        self.arm_executing = msg.data
+
     def color_image_callback(self, msg: Image):
-        if self.object_locked:
+        if self.object_locked or self.arm_executing:
             return
         # encoding = rgb8
         
@@ -86,9 +96,9 @@ class PickPlace(Node):
             self.get_logger().info(f"Red object center: ({cx}, {cy})")
 
             # Test code
-            # rgb_image_marked = rgb_image.copy()
-            # cv2.circle(rgb_image_marked, (cx, cy), 8, (0, 255, 0), thickness=2)  # 绿色圆圈
-            # cv2.imwrite('rgb_image_marked.png', rgb_image_marked)
+            rgb_image_marked = raw_image.copy()
+            cv2.circle(rgb_image_marked, (cx, cy), 8, (0, 255, 0), thickness=2)  # 绿色圆圈
+            cv2.imwrite('rgb_image_marked.png', rgb_image_marked)
 
             # store the current coordinate
             self.last_red_pixel = (cx, cy)
@@ -99,11 +109,18 @@ class PickPlace(Node):
         if green_center is not None:
             cx, cy = green_center
             self.get_logger().info(f"Green object center: ({cx}, {cy})")
-            self.last_green_pixel = (cx, cy)
 
+            # Test code
+            green_image_marked = raw_image.copy()
+            cv2.circle(green_image_marked, (cx, cy), 8, (0, 255, 0), thickness=2)  # 绿色圆圈
+            cv2.imwrite('rgb_image_marked.png', rgb_image_marked)
+
+            self.last_green_pixel = (cx, cy)
+        else:
+            self.get_logger().info("Green object not found.")
 
     def depth_image_callback(self, msg: Image):
-        if self.object_locked or self.last_red_pixel is None:
+        if self.object_locked or self.last_red_pixel is None or self.arm_executing:
             return
         depth_image_raw = np.frombuffer(msg.data, dtype=np.uint16).reshape((msg.height, msg.width))
         # for display 
@@ -196,12 +213,12 @@ class PickPlace(Node):
 
     def color_box_segmentation(self, rgb_image, color='red'):
         if color == 'red':
-            lower = np.array([150, 0, 0])
-            upper = np.array([255, 100, 100])
+            lower = np.array([100, 0, 0])
+            upper = np.array([255, 65, 65])
             mask_name = "red_mask_rgb.png"
         elif color == 'green':
             lower = np.array([0, 150, 0])
-            upper = np.array([100, 255, 100])
+            upper = np.array([70, 255, 700])
             mask_name = "green_mask_rgb.png"
         else:
             self.get_logger().warn(f"Unsupported color: {color}")
@@ -230,7 +247,7 @@ class PickPlace(Node):
         y = (v - self.cy) * z_m / self.fy
         return (x, y, z_m)
     
-    def transform_camera_to_world_tf(self, point_cam, frame='camera_depth_optical_frame'):
+    def transform_camera_to_world_tf(self, point_cam, frame='camera_color_optical_frame'):
         point_msg = PointStamped()
         point_msg.header.frame_id = frame
         # point_msg.header.stamp = self.get_clock().now().to_msg()
@@ -262,11 +279,13 @@ class PickPlace(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = PickPlace()
-    p0 = [0.15, 0.0, 0.4, 1.0, 0.0, 0.0, 0.0]
+    p0 = [0.15, 0.0, 0.35, 1.0, 0.0, 0.0, 0.0]
 
     node.publish_pose(p0)
+    time.sleep(2.0)
 
     try:
+        node.get_logger().info("I tried!!!!!")
         rclpy.spin(node)
     except KeyboardInterrupt:
         pass
