@@ -46,10 +46,16 @@ class PickPlace(Node):
             
         self.last_red_pixel = None
         self.last_green_pixel = None
-        self.fx = 640.5098266601562
-        self.fy = 640.5098266601562
-        self.cx = 640.0
-        self.cy = 360.0
+        if Real: 
+            self.fx = 605.763671875
+            self.fy = 606.1971435546875
+            self.cx = 324.188720703125
+            self.cy = 248.70957946777344
+        else:
+            self.fx = 640.5098266601562
+            self.fy = 640.5098266601562
+            self.cx = 640.0
+            self.cy = 360.0
 
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
@@ -269,6 +275,7 @@ class PickPlace(Node):
         time.sleep(1.0)
         self.publish_gripper_position(1.0)
         time.sleep(1.0)
+        # TODO: direct move to target
         self.publish_pose(self.origin_pose)
         time.sleep(1.0)
         self.publish_pose(place_target_pose)
