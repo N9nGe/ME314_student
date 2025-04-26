@@ -14,8 +14,8 @@ from builtin_interfaces.msg import Time
 
 # Import the command queue message types from the reference code
 from me314_msgs.msg import CommandQueue, CommandWrapper
-Real = False
-# Real = True
+# Real = False
+Real = True
 
 # color image topic color/image_raw
 
@@ -63,7 +63,7 @@ class PickPlace(Node):
         self.pick_target_pose = None
         self.place_target_pose = None
         self.object_locked = False
-        self.origin_pose = [0.15, 0.0, 0.25, 1.0, 0.0, 0.0, 0.0]  # Default origin pose
+        self.origin_pose = [0.16664958131555577, 0.0028170095361637172, 0.18776892332246256, 1.0, 0.0, 0.0, 0.0]  # Default origin pose
 
         self.timer = self.create_timer(1.0, self.timer_callback)
 
@@ -120,7 +120,7 @@ class PickPlace(Node):
             # Test code
             green_image_marked = raw_image.copy()
             cv2.circle(green_image_marked, (cx, cy), 8, (255, 0, 0), thickness=2)  # 绿色圆圈
-            cv2.imwrite('rgb_image_marked.png', green_image_marked)
+            cv2.imwrite('green_image_marked.png', green_image_marked)
 
             self.last_green_pixel = (cx, cy)
         else:
@@ -147,7 +147,7 @@ class PickPlace(Node):
             point_world = self.transform_camera_to_world_tf(point_cam)
 
             if point_world is not None:
-                self.pick_target_pose = [point_world[0], point_world[1], point_world[2], 1.0, 0.0, 0.0, 0.0]  
+                self.pick_target_pose = [point_world[0], point_world[1], point_world[2]-0.005, 1.0, 0.0, 0.0, 0.0]  
                 self.get_logger().info(f"Target pose calculated: {self.pick_target_pose}")
         
         if self.last_green_pixel is not None:
@@ -221,7 +221,7 @@ class PickPlace(Node):
     def color_box_segmentation(self, rgb_image, color='red'):
         if color == 'red':
             lower = np.array([100, 0, 0])
-            upper = np.array([255, 65, 65])
+            upper = np.array([255, 85, 85])
             mask_name = "red_mask_rgb.png"
         elif color == 'green':
             lower = np.array([0, 80, 40])
@@ -257,8 +257,8 @@ class PickPlace(Node):
     def transform_camera_to_world_tf(self, point_cam, frame='camera_color_optical_frame'):
         point_msg = PointStamped()
         point_msg.header.frame_id = frame
-        point_msg.header.stamp = self.get_clock().now().to_msg()
-        # point_msg.header.stamp = Time()
+        # point_msg.header.stamp = self.get_clock().now().to_msg()
+        point_msg.header.stamp = Time()
         point_msg.point.x = point_cam[0]
         point_msg.point.y = point_cam[1]
         point_msg.point.z = point_cam[2]
@@ -272,16 +272,9 @@ class PickPlace(Node):
 
     def execute_pick_and_place(self, pick_up_target_pose, place_target_pose):
         self.publish_pose(pick_up_target_pose)
-        time.sleep(1.0)
         self.publish_gripper_position(1.0)
-        time.sleep(1.0)
-        # TODO: direct move to target
-        self.publish_pose(self.origin_pose)
-        time.sleep(1.0)
         self.publish_pose(place_target_pose)
-        time.sleep(1.0)
         self.publish_gripper_position(0.0)
-        time.sleep(1.0)
         self.publish_pose(self.origin_pose)
 
 def main(args=None):
@@ -290,7 +283,7 @@ def main(args=None):
     p0 = [0.15, 0.0, 0.35, 1.0, 0.0, 0.0, 0.0]
 
     node.publish_pose(p0)
-    time.sleep(2.0)
+    time.sleep(5.0)
 
     try:
         node.get_logger().info("I tried!!!!!")

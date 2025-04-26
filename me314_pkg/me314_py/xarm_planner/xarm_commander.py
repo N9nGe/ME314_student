@@ -141,7 +141,8 @@ class ME314_XArm_Queue_Commander(Node):
         self.timer_joint_positions = self.create_timer(0.1, self.publish_current_joint_positions)
         self.timer_queue_status = self.create_timer(0.1, self.publish_queue_status)
         self.timer_queue_processor = self.create_timer(0.1, self.process_command_queue)
-        self.ft_timer = self.create_timer(0.01, self.check_ft_threshold)
+        # TODO: Check the range of the force check.
+        # self.ft_timer = self.create_timer(0.01, self.check_ft_threshold)
 
         ####################################################################
         # INITIALIZATION
