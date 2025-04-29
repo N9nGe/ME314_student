@@ -219,21 +219,38 @@ class PickPlace(Node):
         self.get_logger().info(f"Published gripper command to queue: {gripper_pos:.2f}")
 
     def color_box_segmentation(self, rgb_image, color='red'):
+        # Convert RGB image to HSV
+        hsv_image = cv2.cvtColor(rgb_image, cv2.COLOR_RGB2HSV)
+
         if color == 'red':
-            lower = np.array([100, 0, 0])
-            upper = np.array([255, 85, 85])
-            mask_name = "red_mask_rgb.png"
+            # 红色在 HSV 中有两个区间（H 分布在头尾）
+            lower1 = np.array([0, 100, 100])
+            upper1 = np.array([10, 255, 255])
+
+            lower2 = np.array([160, 100, 100])
+            upper2 = np.array([180, 255, 255])
+
+            mask1 = cv2.inRange(hsv_image, lower1, upper1)
+            mask2 = cv2.inRange(hsv_image, lower2, upper2)
+            mask = cv2.bitwise_or(mask1, mask2)
+
+            mask_name = "red_mask_hsv.png"
+
         elif color == 'green':
-            lower = np.array([0, 80, 40])
-            upper = np.array([105, 135, 120])
-            mask_name = "green_mask_rgb.png"
+            lower = np.array([40, 50, 50])
+            upper = np.array([85, 255, 255])
+            mask = cv2.inRange(hsv_image, lower, upper)
+
+            mask_name = "green_mask_hsv.png"
+        
         else:
             self.get_logger().warn(f"Unsupported color: {color}")
             return None
 
-        mask = cv2.inRange(rgb_image, lower, upper)
+        # Save the mask for debugging
         cv2.imwrite(mask_name, mask)
 
+        # Find contours
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         if len(contours) == 0:
             return None
