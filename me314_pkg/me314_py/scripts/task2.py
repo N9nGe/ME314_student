@@ -311,15 +311,30 @@ class PickPlace(Node):
         return vec / norm
 
     def execute_plug_and_hole(self, pick_up_target_pose, place_target_pose):
+        start_point = [pick_up_target_pose[0], pick_up_target_pose[1]]
+        end_point = [place_target_pose[0], place_target_pose[1]]
+        unit_vector = self.unit_vector(start_point, end_point)
+
         self.publish_pose(pick_up_target_pose)
         self.publish_gripper_position(1.0)
         self.publish_pose(place_target_pose)
-        # while True:
-        #     if self.collision_check:
-        #         time.sleep(1.0)
+        
+        current_xy = [self.current_arm_pose.position.x, self.current_arm_pose.position.y]
+        new_pose = self.current_arm_pose
+        while self.current_arm_pose.position.z > 0.1:
+            if self.collision_check:
+                current_xy += unit_vector * 0.1
+                new_pose.position.x = current_xy[0]
+                new_pose.position.y = current_xy[1]
+                self.publish_pose(new_pose)
+                time.sleep(2.0)
+            
+            new_pose.position.z = self.current_arm_pose.position.z - 0.01
+            self.publish_pose(new_pose)
+            time.sleep(2.0)
 
-        # self.publish_gripper_position(0.0)
-        # self.publish_pose(self.origin_pose)
+        self.publish_gripper_position(0.0)
+        self.publish_pose(self.origin_pose)
 
 def main(args=None):
     rclpy.init(args=args)
