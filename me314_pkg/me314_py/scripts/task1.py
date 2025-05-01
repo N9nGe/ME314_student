@@ -223,7 +223,6 @@ class PickPlace(Node):
         hsv_image = cv2.cvtColor(rgb_image, cv2.COLOR_RGB2HSV)
 
         if color == 'red':
-            # 红色在 HSV 中有两个区间（H 分布在头尾）
             lower1 = np.array([0, 100, 100])
             upper1 = np.array([10, 255, 255])
 
@@ -307,28 +306,6 @@ def main(args=None):
         rclpy.spin(node)
     except KeyboardInterrupt:
         pass
-
-    # Define poses using the array format [x, y, z, qx, qy, qz, qw]
-    # p0 = [0.35442898432566816, 0.08758732426157431, 0.007964988540690887, 1.0, 0.0, 0.0, 0.0]
-    # p1 = [0.15, 0.0, 0.25, 1.0, 0.0, 0.0, 0.0]
-
-    # poses = [p0, p1]
-    # node.publish_pose(p0)
-    # node.publish_gripper_position(1.0)
-    # node.publish_pose(p1)
-
-    # # Let's first open the gripper (0.0 to 1.0, where 0.0 is fully open and 1.0 is fully closed)
-    # node.get_logger().info("Opening gripper...")
-    # node.publish_gripper_position(0.0)
-
-    # # Move the arm to each pose
-    # for i, pose in enumerate(poses):
-    #     node.get_logger().info(f"Publishing Pose {i+1}...")
-    #     node.publish_pose(pose)
-
-    # # Now close the gripper.
-    # node.get_logger().info("Closing gripper...")
-    # node.publish_gripper_position(1.0)
 
     node.get_logger().info("All actions done. Shutting down.")
     node.destroy_node()
