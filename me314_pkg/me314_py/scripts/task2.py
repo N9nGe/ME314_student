@@ -14,8 +14,6 @@ from builtin_interfaces.msg import Time
 
 # Import the command queue message types from the reference code
 from me314_msgs.msg import CommandQueue, CommandWrapper
-# Real = False
-Real = True
 
 # color image topic color/image_raw
 
@@ -40,25 +38,16 @@ class PickPlace(Node):
         self.collision_sub = self.create_subscription(Bool, '/me314_xarm_collision', self.collision_callback, 10)
 
         # image subscriber
-        if Real == False:
-            self.rgb_subscription = self.create_subscription(Image,'/color/image_raw', self.color_image_callback, 10)
-            self.depth_subscription = self.create_subscription(Image,'/aligned_depth_to_color/image_raw', self.depth_image_callback, 10)
-        else:
-            self.rgb_subscription = self.create_subscription(Image,'/camera/realsense2_camera_node/color/image_raw', self.color_image_callback, 10)
-            self.depth_subscription = self.create_subscription(Image,'/camera/realsense2_camera_node/aligned_depth_to_color/image_raw', self.depth_image_callback, 10)
+        self.rgb_subscription = self.create_subscription(Image,'/camera/realsense2_camera_node/color/image_raw', self.color_image_callback, 10)
+        self.depth_subscription = self.create_subscription(Image,'/camera/realsense2_camera_node/aligned_depth_to_color/image_raw', self.depth_image_callback, 10)
 
         self.last_red_pixel = None
         self.last_blue_pixel = None
-        if Real: 
-            self.fx = 605.763671875
-            self.fy = 606.1971435546875
-            self.cx = 324.188720703125
-            self.cy = 248.70957946777344
-        else:
-            self.fx = 640.5098266601562
-            self.fy = 640.5098266601562
-            self.cx = 640.0
-            self.cy = 360.0
+        
+        self.fx = 605.763671875
+        self.fy = 606.1971435546875
+        self.cx = 324.188720703125
+        self.cy = 248.70957946777344
 
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
