@@ -36,6 +36,7 @@ install(PROGRAMS
   me314_py/xarm_planner/xarm_a2b_example.py
   me314_py/xarm_planner/xarm_commander.py
   me314_py/scripts/task1.py
+  me314_py/scripts/task2.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

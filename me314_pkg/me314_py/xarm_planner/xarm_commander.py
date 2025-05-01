@@ -66,8 +66,8 @@ class ME314_XArm_Queue_Commander(Node):
         self.declare_parameter('use_sim', False)
         self.use_sim = self.get_parameter('use_sim').value
         self.log_info(f"Running with use_sim={self.use_sim}")
-
-        self.declare_parameter('ft_threshold', 2.0)
+        # Force params
+        self.declare_parameter('ft_threshold', 5.0)
         self.ft_threshold = self.get_parameter('ft_threshold').value
         self.last_ext_force_mag = 0.0
         self.controller_goal_handle = None
@@ -142,7 +142,7 @@ class ME314_XArm_Queue_Commander(Node):
         self.timer_queue_status = self.create_timer(0.1, self.publish_queue_status)
         self.timer_queue_processor = self.create_timer(0.1, self.process_command_queue)
         # TODO: Check the range of the force check.
-        # self.ft_timer = self.create_timer(0.01, self.check_ft_threshold)
+        self.ft_timer = self.create_timer(0.01, self.check_ft_threshold)
 
         ####################################################################
         # INITIALIZATION
