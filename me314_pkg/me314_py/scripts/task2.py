@@ -37,6 +37,9 @@ class PickPlace(Node):
         self.collision_check = False
         self.collision_sub = self.create_subscription(Bool, '/me314_xarm_collision', self.collision_callback, 10)
 
+        self.queue_size = 0.0
+        self.queue_size_sub = self.create_subscription(Float64, '/me314_xarm_queue_size', self.queue_size_callback, 10)
+
         # image subscriber
         self.rgb_subscription = self.create_subscription(Image,'/camera/realsense2_camera_node/color/image_raw', self.color_image_callback, 10)
         self.depth_subscription = self.create_subscription(Image,'/camera/realsense2_camera_node/aligned_depth_to_color/image_raw', self.depth_image_callback, 10)
@@ -81,6 +84,9 @@ class PickPlace(Node):
 
     def collision_callback(self, msg: Bool):
         self.collision_check = msg.data
+    
+    def queue_size_callback(self, msg: Float64):
+        self.queue_size = msg.data
 
     def color_image_callback(self, msg: Image):
         if self.object_locked or self.arm_executing:
@@ -304,24 +310,31 @@ class PickPlace(Node):
         end_point = [place_target_pose[0], place_target_pose[1]]
         unit_vector = self.unit_vector(start_point, end_point)
 
+        # pick up the red cylinder and put it above the hole
         self.publish_pose(pick_up_target_pose)
         self.publish_gripper_position(1.0)
         self.publish_pose(place_target_pose)
         
+        # wait for the queue to be empty
+        while self.queue_size > 0.0:
+            time.sleep(0.01) 
+        self.get_logger().info("Queue is empty, ready to move down.")     
+        # tried to plug in
         current_xy = [self.current_arm_pose.position.x, self.current_arm_pose.position.y]
         new_pose = self.current_arm_pose
         while self.current_arm_pose.position.z > 0.1:
-            if self.collision_check:
-                current_xy += unit_vector * 0.1
-                new_pose.position.x = current_xy[0]
-                new_pose.position.y = current_xy[1]
+            if not self.arm_executing:
+                if self.collision_check:
+                    current_xy = list(np.array(current_xy) + unit_vector * 0.1)
+                    new_pose.position.x = current_xy[0]
+                    new_pose.position.y = current_xy[1]
+                    self.publish_pose(new_pose)
+                    time.sleep(2.0)
+                
+                new_pose.position.z = self.current_arm_pose.position.z - 0.01
                 self.publish_pose(new_pose)
                 time.sleep(2.0)
-            
-            new_pose.position.z = self.current_arm_pose.position.z - 0.01
-            self.publish_pose(new_pose)
-            time.sleep(2.0)
-
+        # open gripper
         self.publish_gripper_position(0.0)
         self.publish_pose(self.origin_pose)
 
