@@ -164,7 +164,7 @@ class PickPlace(Node):
             point_world = self.transform_camera_to_world_tf(point_cam)
             if point_world is not None:
                 # 0.05 is the offset of the blue region
-                self.place_target_pose = [point_world[0], point_world[1], point_world[2]+0.10, 1.0, 0.0, 0.0, 0.0]  
+                self.place_target_pose = [point_world[0], point_world[1], point_world[2]+0.115, 1.0, 0.0, 0.0, 0.0]  
                 self.get_logger().info(f"Target pose calculated: {self.place_target_pose}")
 
     def publish_pose(self, pose_array: list):
@@ -288,7 +288,7 @@ class PickPlace(Node):
             self.get_logger().warn(f"TF transform failed: {str(e)}")
             return None
 
-    def unit_vector(pointA, pointB):
+    def unit_vector(self, pointA, pointB):
         # Convert to NumPy arrays
         A = np.array(pointA, dtype=float)
         B = np.array(pointB, dtype=float)
@@ -309,29 +309,46 @@ class PickPlace(Node):
         start_point = [pick_up_target_pose[0], pick_up_target_pose[1]]
         end_point = [place_target_pose[0], place_target_pose[1]]
         unit_vector = self.unit_vector(start_point, end_point)
-
+        
         # pick up the red cylinder and put it above the hole
         self.publish_pose(pick_up_target_pose)
         self.publish_gripper_position(1.0)
+        pick_up_target_pose[2] += 0.05
+        self.publish_pose(pick_up_target_pose)
         self.publish_pose(place_target_pose)
         
+        diff = abs(place_target_pose[0] - self.current_arm_pose.position.x) \
+                + abs(place_target_pose[1] - self.current_arm_pose.position.y) \
+                + abs(place_target_pose[2] - self.current_arm_pose.position.z)
         # wait for the queue to be empty
-        while self.queue_size > 0.0:
+        while self.queue_size > 0.0 or diff > 1e-2 :
+            diff = abs(place_target_pose[0] - self.current_arm_pose.position.x) \
+                    + abs(place_target_pose[1] - self.current_arm_pose.position.y) \
+                    + abs(place_target_pose[2] - self.current_arm_pose.position.z)
+            print(diff)
+            print(self.current_arm_pose.position)
             time.sleep(0.01) 
         self.get_logger().info("Queue is empty, ready to move down.")     
         # tried to plug in
         current_xy = [self.current_arm_pose.position.x, self.current_arm_pose.position.y]
-        new_pose = self.current_arm_pose
-        while self.current_arm_pose.position.z > 0.1:
+        new_pose = [self.current_arm_pose.position.x,
+                    self.current_arm_pose.position.y,
+                    self.current_arm_pose.position.z,
+                    self.current_arm_pose.orientation.x,
+                    self.current_arm_pose.orientation.y,
+                    self.current_arm_pose.orientation.z,
+                    self.current_arm_pose.orientation.w
+        ]
+        while self.current_arm_pose.position.z > 0.15:
             if not self.arm_executing:
                 if self.collision_check:
                     current_xy = list(np.array(current_xy) + unit_vector * 0.1)
-                    new_pose.position.x = current_xy[0]
-                    new_pose.position.y = current_xy[1]
+                    new_pose[0] = current_xy[0]
+                    new_pose[1] = current_xy[1]
                     self.publish_pose(new_pose)
                     time.sleep(2.0)
                 
-                new_pose.position.z = self.current_arm_pose.position.z - 0.01
+                new_pose[2] = self.current_arm_pose.position.z - 0.01
                 self.publish_pose(new_pose)
                 time.sleep(2.0)
         # open gripper
