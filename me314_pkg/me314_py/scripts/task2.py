@@ -60,18 +60,50 @@ class PickPlace(Node):
         self.object_locked = False
         self.origin_pose = [0.16664958131555577, 0.0028170095361637172, 0.18776892332246256, 1.0, 0.0, 0.0, 0.0]  # Default origin pose
 
+        self.pre_timer = self.create_timer(1.0, self.pre_timer_callback)
         self.timer = self.create_timer(1.0, self.timer_callback)
 
+        self.pre_task2_done = False
         self.task2_done = False
         
 
+    def pre_timer_callback(self):
+        if not self.pre_task2_done:
+            if self.pick_target_pose and self.place_target_pose:
+                diff = abs(self.place_target_pose[0] - self.current_arm_pose.position.x) \
+                    + abs(self.place_target_pose[1] - self.current_arm_pose.position.y) \
+                    + abs(self.place_target_pose[2] - self.current_arm_pose.position.z)
+                if diff < 1e-2:
+                        self.pre_task2_done = True
+                if not self.object_locked:
+                    self.get_logger().info("Timer triggered Pre plug.")
+                    self.pre_execute_plug_and_hole(self.pick_target_pose, self.place_target_pose)
+                    self.object_locked = True
+
     def timer_callback(self):
-        if not self.task2_done:
-            if self.pick_target_pose and self.place_target_pose and not self.object_locked:
-                self.get_logger().info("Timer triggered pick-and-place.")
-                self.execute_plug_and_hole(self.pick_target_pose, self.place_target_pose)
-                self.task2_done = True
-                self.object_locked = True
+        if self.pre_task2_done and not self.task2_done:
+            if self.pick_target_pose and self.place_target_pose:
+                self.get_logger().info("Timer triggered plug.")
+                start_point = [self.pick_target_pose[0], self.pick_target_pose[1]]
+                end_point = [self.place_target_pose[0], self.place_target_pose[1]]
+                unit_vector = self.unit_vector(start_point, end_point) 
+
+                # tried to plug in
+                current_xy = [self.current_arm_pose.position.x, self.current_arm_pose.position.y]
+                new_pose = [self.current_arm_pose.position.x,
+                            self.current_arm_pose.position.y,
+                            self.current_arm_pose.position.z,
+                            self.current_arm_pose.orientation.x,
+                            self.current_arm_pose.orientation.y,
+                            self.current_arm_pose.orientation.z,
+                            self.current_arm_pose.orientation.w
+                ]
+                if self.current_arm_pose.position.z > 0.13:
+                    self.execute_plug_and_hole(current_xy, unit_vector, new_pose)
+                else:
+                    self.task2_done = True
+                    self.publish_gripper_position(0.0)
+                    self.publish_pose(self.origin_pose)
 
     def arm_pose_callback(self, msg: Pose):
         self.current_arm_pose = msg
@@ -305,11 +337,7 @@ class PickPlace(Node):
         # Normalize the vector
         return vec / norm
 
-    def execute_plug_and_hole(self, pick_up_target_pose, place_target_pose):
-        start_point = [pick_up_target_pose[0], pick_up_target_pose[1]]
-        end_point = [place_target_pose[0], place_target_pose[1]]
-        unit_vector = self.unit_vector(start_point, end_point)
-        
+    def pre_execute_plug_and_hole(self, pick_up_target_pose, place_target_pose):
         # pick up the red cylinder and put it above the hole
         self.publish_pose(pick_up_target_pose)
         self.publish_gripper_position(1.0)
@@ -317,43 +345,19 @@ class PickPlace(Node):
         self.publish_pose(pick_up_target_pose)
         self.publish_pose(place_target_pose)
         
-        diff = abs(place_target_pose[0] - self.current_arm_pose.position.x) \
-                + abs(place_target_pose[1] - self.current_arm_pose.position.y) \
-                + abs(place_target_pose[2] - self.current_arm_pose.position.z)
-        # wait for the queue to be empty
-        while self.queue_size > 0.0 or diff > 1e-2 :
-            diff = abs(place_target_pose[0] - self.current_arm_pose.position.x) \
-                    + abs(place_target_pose[1] - self.current_arm_pose.position.y) \
-                    + abs(place_target_pose[2] - self.current_arm_pose.position.z)
-            print(diff)
-            print(self.current_arm_pose.position)
-            time.sleep(0.01) 
-        self.get_logger().info("Queue is empty, ready to move down.")     
-        # tried to plug in
-        current_xy = [self.current_arm_pose.position.x, self.current_arm_pose.position.y]
-        new_pose = [self.current_arm_pose.position.x,
-                    self.current_arm_pose.position.y,
-                    self.current_arm_pose.position.z,
-                    self.current_arm_pose.orientation.x,
-                    self.current_arm_pose.orientation.y,
-                    self.current_arm_pose.orientation.z,
-                    self.current_arm_pose.orientation.w
-        ]
-        while self.current_arm_pose.position.z > 0.15:
-            if not self.arm_executing:
-                if self.collision_check:
-                    current_xy = list(np.array(current_xy) + unit_vector * 0.1)
-                    new_pose[0] = current_xy[0]
-                    new_pose[1] = current_xy[1]
-                    self.publish_pose(new_pose)
-                    time.sleep(2.0)
-                
-                new_pose[2] = self.current_arm_pose.position.z - 0.01
+    def execute_plug_and_hole(self, current_xy, unit_vector, new_pose):
+        if not self.arm_executing:
+            if self.collision_check:
+                current_xy = list(np.array(current_xy) + unit_vector * 0.1)
+                new_pose[0] = current_xy[0]
+                new_pose[1] = current_xy[1]
                 self.publish_pose(new_pose)
                 time.sleep(2.0)
-        # open gripper
-        self.publish_gripper_position(0.0)
-        self.publish_pose(self.origin_pose)
+            
+            new_pose[2] = self.current_arm_pose.position.z - 0.01
+            self.publish_pose(new_pose)
+            time.sleep(2.0)
+        
 
 def main(args=None):
     rclpy.init(args=args)
