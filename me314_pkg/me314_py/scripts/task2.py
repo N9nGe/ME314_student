@@ -47,10 +47,10 @@ class PickPlace(Node):
         self.last_red_pixel = None
         self.last_blue_pixel = None
         
-        self.fx = 605.763671875
-        self.fy = 606.1971435546875
-        self.cx = 324.188720703125
-        self.cy = 248.70957946777344
+        self.fx = 908.6455078125
+        self.fy = 909.2957153320312
+        self.cx = 646.2830810546875
+        self.cy = 373.0643615722656
 
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
@@ -65,6 +65,7 @@ class PickPlace(Node):
 
         self.pre_task2_done = False
         self.task2_done = False
+        self.release_flag = False
         
 
     def pre_timer_callback(self):
@@ -98,7 +99,7 @@ class PickPlace(Node):
                             self.current_arm_pose.orientation.z,
                             self.current_arm_pose.orientation.w
                 ]
-                if self.current_arm_pose.position.z > 0.13:
+                if not self.release_flag and self.current_arm_pose.position.z > 0.13:
                     self.execute_plug_and_hole(current_xy, unit_vector, new_pose)
                 else:
                     self.task2_done = True
@@ -115,7 +116,8 @@ class PickPlace(Node):
         self.arm_executing = msg.data
 
     def collision_callback(self, msg: Bool):
-        self.collision_check = msg.data
+        if msg.data == True:
+            self.collision_check = True
     
     def queue_size_callback(self, msg: Float64):
         self.queue_size = msg.data
@@ -168,7 +170,7 @@ class PickPlace(Node):
         depth_image = cv2.normalize(depth_image_raw, None, 0, 255, cv2.NORM_MINMAX)
         depth_image = depth_image.astype(np.uint8)
         # cv2.imwrite('depth_display.png', depth_   image)
-        if self.last_blue_pixel is not None:
+        if self.last_red_pixel is not None:
             u, v = self.last_red_pixel
             z_mm = depth_image_raw[v, u] 
 
@@ -181,7 +183,7 @@ class PickPlace(Node):
             point_world = self.transform_camera_to_world_tf(point_cam)
 
             if point_world is not None:
-                self.pick_target_pose = [point_world[0], point_world[1], point_world[2]-0.01, 1.0, 0.0, 0.0, 0.0]  
+                self.pick_target_pose = [point_world[0], point_world[1], point_world[2]-0.02, 1.0, 0.0, 0.0, 0.0]  
                 self.get_logger().info(f"Target pose calculated: {self.pick_target_pose}")
         
         if self.last_blue_pixel is not None:
@@ -196,7 +198,7 @@ class PickPlace(Node):
             point_world = self.transform_camera_to_world_tf(point_cam)
             if point_world is not None:
                 # 0.05 is the offset of the blue region
-                self.place_target_pose = [point_world[0], point_world[1], point_world[2]+0.115, 1.0, 0.0, 0.0, 0.0]  
+                self.place_target_pose = [point_world[0], point_world[1], point_world[2]+0.105, 1.0, 0.0, 0.0, 0.0]  
                 self.get_logger().info(f"Target pose calculated: {self.place_target_pose}")
 
     def publish_pose(self, pose_array: list):
@@ -346,17 +348,15 @@ class PickPlace(Node):
         self.publish_pose(place_target_pose)
         
     def execute_plug_and_hole(self, current_xy, unit_vector, new_pose):
-        if not self.arm_executing:
+        if not self.arm_executing and not self.release_flag:
             if self.collision_check:
-                current_xy = list(np.array(current_xy) + unit_vector * 0.1)
-                new_pose[0] = current_xy[0]
-                new_pose[1] = current_xy[1]
+                self.publish_gripper_position(0.4)
+                new_pose[1] = self.current_arm_pose.position.y - 0.005
                 self.publish_pose(new_pose)
-                time.sleep(2.0)
-            
-            new_pose[2] = self.current_arm_pose.position.z - 0.01
-            self.publish_pose(new_pose)
-            time.sleep(2.0)
+                self.release_flag = True
+            else: 
+                new_pose[2] = self.current_arm_pose.position.z - 0.005
+                self.publish_pose(new_pose)
         
 
 def main(args=None):

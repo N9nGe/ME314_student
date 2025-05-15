@@ -47,10 +47,10 @@ class PickPlace(Node):
         self.last_red_pixel = None
         self.last_green_pixel = None
         if Real: 
-            self.fx = 605.763671875
-            self.fy = 606.1971435546875
-            self.cx = 324.188720703125
-            self.cy = 248.70957946777344
+            self.fx = 908.6455078125
+            self.fy = 909.2957153320312
+            self.cx = 646.2830810546875
+            self.cy = 373.0643615722656
         else:
             self.fx = 640.5098266601562
             self.fy = 640.5098266601562
@@ -134,7 +134,7 @@ class PickPlace(Node):
         depth_image = cv2.normalize(depth_image_raw, None, 0, 255, cv2.NORM_MINMAX)
         depth_image = depth_image.astype(np.uint8)
         # cv2.imwrite('depth_display.png', depth_image)
-        if self.last_green_pixel is not None:
+        if self.last_red_pixel is not None:
             u, v = self.last_red_pixel
             z_mm = depth_image_raw[v, u] 
 
@@ -144,6 +144,7 @@ class PickPlace(Node):
 
             x, y, z = self.pixel_to_camera_point(u, v, z_mm)
             point_cam = [x, y, z]
+            print("Red::::::",point_cam)
             point_world = self.transform_camera_to_world_tf(point_cam)
 
             if point_world is not None:
@@ -159,6 +160,7 @@ class PickPlace(Node):
             
             x, y, z = self.pixel_to_camera_point(u, v, z_mm)
             point_cam = [x, y, z]
+            print("Green::::::",point_cam)
             point_world = self.transform_camera_to_world_tf(point_cam)
             if point_world is not None:
                 # 0.05 is the offset of the green region
