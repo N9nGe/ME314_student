@@ -85,12 +85,8 @@ class PickPlace(Node):
         if self.pre_task2_done and not self.task2_done:
             if self.pick_target_pose and self.place_target_pose:
                 self.get_logger().info("Timer triggered plug.")
-                start_point = [self.pick_target_pose[0], self.pick_target_pose[1]]
-                end_point = [self.place_target_pose[0], self.place_target_pose[1]]
-                unit_vector = self.unit_vector(start_point, end_point) 
 
                 # tried to plug in
-                current_xy = [self.current_arm_pose.position.x, self.current_arm_pose.position.y]
                 new_pose = [self.current_arm_pose.position.x,
                             self.current_arm_pose.position.y,
                             self.current_arm_pose.position.z,
@@ -100,7 +96,7 @@ class PickPlace(Node):
                             self.current_arm_pose.orientation.w
                 ]
                 if not self.release_flag and self.current_arm_pose.position.z > 0.13:
-                    self.execute_plug_and_hole(current_xy, unit_vector, new_pose)
+                    self.execute_plug_and_hole(new_pose)
                 else:
                     self.task2_done = True
                     self.publish_gripper_position(0.0)
@@ -322,23 +318,6 @@ class PickPlace(Node):
             self.get_logger().warn(f"TF transform failed: {str(e)}")
             return None
 
-    def unit_vector(self, pointA, pointB):
-        # Convert to NumPy arrays
-        A = np.array(pointA, dtype=float)
-        B = np.array(pointB, dtype=float)
-
-        # Compute the direction vector
-        vec = B - A
-
-        # Compute the magnitude (Euclidean norm)
-        norm = np.linalg.norm(vec)
-
-        if norm == 0:
-            raise ValueError("Points A and B are the same. Cannot compute unit vector.")
-
-        # Normalize the vector
-        return vec / norm
-
     def pre_execute_plug_and_hole(self, pick_up_target_pose, place_target_pose):
         # pick up the red cylinder and put it above the hole
         self.publish_pose(pick_up_target_pose)
@@ -347,7 +326,7 @@ class PickPlace(Node):
         self.publish_pose(pick_up_target_pose)
         self.publish_pose(place_target_pose)
         
-    def execute_plug_and_hole(self, current_xy, unit_vector, new_pose):
+    def execute_plug_and_hole(self, new_pose):
         if not self.arm_executing and not self.release_flag:
             if self.collision_check:
                 self.publish_gripper_position(0.4)
