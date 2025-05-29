@@ -38,6 +38,7 @@ install(PROGRAMS
   me314_py/scripts/task1.py
   me314_py/scripts/task2.py
   me314_py/scripts/task3.py
+  me314_py/scripts/task4.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
