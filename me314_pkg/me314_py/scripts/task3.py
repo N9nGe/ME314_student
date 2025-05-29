@@ -76,34 +76,9 @@ class PickPlace(Node):
                 if diff < 1e-2:
                         self.pre_task3_done = True
                 if not self.object_locked:
-                    self.get_logger().info("Timer triggered Pre plug.")
+                    self.get_logger().info("Timer triggered Pre grasp.")
                     self.pre_coin(self.pick_target_pose)
                     self.object_locked = True
-
-    # def timer_callback(self):
-    #     if self.pre_task3_done and not self.task3_done:
-    #         if self.pick_target_pose and self.place_target_pose:
-    #             self.get_logger().info("Timer triggered plug.")
-    #             start_point = [self.pick_target_pose[0], self.pick_target_pose[1]]
-    #             end_point = [self.place_target_pose[0], self.place_target_pose[1]]
-    #             unit_vector = self.unit_vector(start_point, end_point) 
-
-    #             # tried to plug in
-    #             current_xy = [self.current_arm_pose.position.x, self.current_arm_pose.position.y]
-    #             new_pose = [self.current_arm_pose.position.x,
-    #                         self.current_arm_pose.position.y,
-    #                         self.current_arm_pose.position.z,
-    #                         self.current_arm_pose.orientation.x,
-    #                         self.current_arm_pose.orientation.y,
-    #                         self.current_arm_pose.orientation.z,
-    #                         self.current_arm_pose.orientation.w
-    #             ]
-    #             if not self.release_flag and self.current_arm_pose.position.z > 0.13:
-    #                 self.execute_plug_and_hole(current_xy, unit_vector, new_pose)
-    #             else:
-    #                 self.task3_done = True
-    #                 self.publish_gripper_position(0.0)
-    #                 self.publish_pose(self.origin_pose)
 
     def arm_pose_callback(self, msg: Pose):
         self.current_arm_pose = msg
@@ -132,7 +107,7 @@ class PickPlace(Node):
         # cv2.imwrite('image_rgb.png', rgb_image)
 
         # get the center of the grey box
-        grey_center = self.color_box_segmentation(raw_image, 'grey')
+        grey_center = self.shape_based_segmentation(raw_image)
         if grey_center is not None:
             cx, cy = grey_center
             self.get_logger().info(f"grey object center: ({cx}, {cy})")
@@ -154,7 +129,7 @@ class PickPlace(Node):
         # for display 
         depth_image = cv2.normalize(depth_image_raw, None, 0, 255, cv2.NORM_MINMAX)
         depth_image = depth_image.astype(np.uint8)
-        # cv2.imwrite('depth_display.png', depth_   image)
+        # cv2.imwrite('depth_display.png', depth_image)
         if self.last_grey_pixel is not None:
             u, v = self.last_grey_pixel
             z_mm = depth_image_raw[v, u] 
@@ -169,7 +144,8 @@ class PickPlace(Node):
 
             if point_world is not None:
                 # (180, 0, -90) [ 0.7071068, -0.7071068, 0.0, 0.0 ]
-                self.pick_target_pose = [point_world[0], point_world[1], point_world[2]-0.02, 0.7071068, -0.7071068, 0.0, 0.0]  
+                # self.pick_target_pose = [point_world[0], point_world[1], point_world[2]-0.02, 0.7071068, -0.7071068, 0.0, 0.0] 
+                self.pick_target_pose = [point_world[0], point_world[1], point_world[2]-0.02, 1.0, 0.0, 0.0, 0.0]
                 self.get_logger().info(f"Target pose calculated: {self.pick_target_pose}")
 
     def publish_pose(self, pose_array: list):
@@ -225,38 +201,40 @@ class PickPlace(Node):
         
         self.get_logger().info(f"Published gripper command to queue: {gripper_pos:.2f}")
 
-    def color_box_segmentation(self, rgb_image, color='grey'):
-        # Convert RGB image to HSV
-        hsv_image = cv2.cvtColor(rgb_image, cv2.COLOR_RGB2HSV)
+    def shape_based_segmentation(self, rgb_image):
+        # gray image
+        gray_image = cv2.cvtColor(rgb_image, cv2.COLOR_RGB2GRAY)
 
-        if color == 'grey':
-            lower_grey = np.array([0, 0, 100])
-            upper_grey = np.array([180, 20, 150])
-            mask = cv2.inRange(hsv_image, lower_grey, upper_grey)
-            mask_name = "grey_mask_hsv.png"
-        
-        else:
-            self.get_logger().warn(f"Unsupported color: {color}")
+        # Gaussian blur
+        blurred_image = cv2.GaussianBlur(gray_image, (9, 9), 2)
+
+        # Circle detection using HoughCircles
+        circles = cv2.HoughCircles(
+            blurred_image,
+            cv2.HOUGH_GRADIENT,
+            dp=1.2,
+            minDist=30,
+            param1=100,
+            param2=30,
+            minRadius=10,
+            maxRadius=100
+        )
+
+        if circles is None:
+            self.get_logger().warn("No circles detected")
             return None
 
-        # Save the mask for debugging
-        cv2.imwrite(mask_name, mask)
+        # 取第一个圆（默认取最大的）
+        circles = np.round(circles[0, :]).astype("int")
+        x, y, r = circles[0]
 
-        # Find contours
-        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        if len(contours) == 0:
-            return None
+        # 可选：保存调试图像
+        mask = np.zeros_like(gray_image, dtype=np.uint8)
+        cv2.circle(mask, (x, y), r, 255, thickness=-1)
+        cv2.imwrite("circle_mask.png", mask)
 
-        largest_contour = max(contours, key=cv2.contourArea)
-        M = cv2.moments(largest_contour)
-        if M["m00"] == 0:
-            return None
+        return (x, y)
 
-        cx = int(M["m10"] / M["m00"])
-        cy = int(M["m01"] / M["m00"])
-        return (cx, cy)
-
-    
     def pixel_to_camera_point(self, u, v, z_mm):
         z_m = z_mm / 1000.0  # mm -> m
         x = (u - self.cx) * z_m / self.fx
@@ -280,7 +258,7 @@ class PickPlace(Node):
             return None
 
     def pre_coin(self, pick_up_target_pose):
-        # pick up the red cylinder and put it above the hole
+        # pick up the coin 
         self.publish_pose(pick_up_target_pose)
         
     def execute_plug_and_hole(self, current_xy, unit_vector, new_pose):
@@ -302,7 +280,7 @@ def main(args=None):
     # (180, -5, -90)[ 0.7064338, -0.7064338, 0.0308436, -0.0308435 ]
     # p0 = [0.15, 0.0, 0.25, 0.7071068, -0.7071068, 0.0, 0.0]
     # p1 = [0.15, 0.0, 0.25, 0.7064338, -0.7064338, 0.0308435, -0.0308436]
-    p0 = [0.15, 0.0, 0.4, 1.0, 0.0, 0.0, 0.0]
+    p0 = [0.15, 0.0, 0.3, 1.0, 0.0, 0.0, 0.0]
     node.publish_pose(p0)
     # node.publish_pose(p1)
     time.sleep(5.0)
