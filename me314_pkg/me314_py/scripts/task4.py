@@ -47,10 +47,10 @@ class PickPlace(Node):
         self.last_grey_pixel = None
         self.last_green_pixel = None
         
-        self.fx = 605.763671875
-        self.fy = 606.1971435546875
-        self.cx = 324.188720703125
-        self.cy = 248.70957946777344
+        self.fx = 908.6455078125
+        self.fy = 909.2957153320312
+        self.cx = 646.2830810546875
+        self.cy = 373.0643615722656
 
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
@@ -229,41 +229,69 @@ class PickPlace(Node):
     def color_box_segmentation(self, rgb_image, color='green'):
         # Convert RGB image to HSV
         hsv_image = cv2.cvtColor(rgb_image, cv2.COLOR_RGB2HSV)
-
         if color == 'green':
             lower = np.array([40, 50, 50])
             upper = np.array([85, 255, 255])
             mask = cv2.inRange(hsv_image, lower, upper)
-
             mask_name = "green_mask_hsv.png"
         
         elif color == 'yellow':
             lower = np.array([15, 30, 60])
             upper = np.array([35, 150, 220])
             mask = cv2.inRange(hsv_image, lower, upper)
-
             kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
             mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
             mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
-
             mask_name = "yellow_mask_hsv.png"
         else:
             self.get_logger().warn(f"Unsupported color: {color}")
             return None
-
+        
         # Save the mask for debugging
         cv2.imwrite(mask_name, mask)
-
+        
         # Find contours
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         if len(contours) == 0:
             return None
-
-        largest_contour = max(contours, key=cv2.contourArea)
-        M = cv2.moments(largest_contour)
+        
+        if color == 'yellow':
+            # Filter contours by minimum area to avoid noise
+            min_area = 100  # Adjust this threshold as needed
+            valid_contours = [c for c in contours if cv2.contourArea(c) > min_area]
+            
+            if len(valid_contours) == 0:
+                return None
+            
+            # Sort contours by area (largest first)
+            valid_contours.sort(key=cv2.contourArea, reverse=True)
+            
+            # If there are multiple contours, mask out the largest one and select the second largest
+            # If there's only one contour, use it
+            if len(valid_contours) > 1:
+                # Create a copy of the mask
+                modified_mask = mask.copy()
+                
+                # Fill the largest contour with black (mask it out)
+                largest_contour = valid_contours[0]
+                cv2.fillPoly(modified_mask, [largest_contour], 0)
+                
+                # Save the modified mask for debugging
+                cv2.imwrite(f"modified_{mask_name}", modified_mask)
+                
+                # Use the second largest contour
+                selected_contour = valid_contours[1]
+            else:
+                # Only one contour found, use it
+                selected_contour = valid_contours[0]
+        else:
+            selected_contour = max(contours, key=cv2.contourArea)
+            
+        # Calculate centroid of the uppermost contour
+        M = cv2.moments(selected_contour)
         if M["m00"] == 0:
             return None
-
+        
         cx = int(M["m10"] / M["m00"])
         cy = int(M["m01"] / M["m00"])
         return (cx, cy)
@@ -292,7 +320,7 @@ class PickPlace(Node):
     
     def pre_coin(self, pick_up_target_pose, place_target_pose):
         self.publish_pose(pick_up_target_pose)
-        self.publish_gripper_position(0.63)
+        self.publish_gripper_position(1.0)
         self.publish_pose(place_target_pose)
         self.publish_gripper_position(0.0)
         self.publish_pose(self.origin_pose)
@@ -305,7 +333,7 @@ def main(args=None):
     # (180, -5, -90)[ 0.7064338, -0.7064338, 0.0308436, -0.0308435 ]
     # p0 = [0.15, 0.0, 0.25, 0.7071068, -0.7071068, 0.0, 0.0]
     # p1 = [0.15, 0.0, 0.25, 0.7064338, -0.7064338, 0.0308435, -0.0308436]
-    p0 = [0.15, 0.0, 0.35, 1.0, 0.0, 0.0, 0.0]
+    p0 = [0.15, 0.0, 0.32, 1.0, 0.0, 0.0, 0.0]
     node.publish_pose(p0)
     # node.publish_pose(p1)
     time.sleep(3.0)

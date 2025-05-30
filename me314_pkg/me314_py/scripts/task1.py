@@ -148,7 +148,7 @@ class PickPlace(Node):
             point_world = self.transform_camera_to_world_tf(point_cam)
 
             if point_world is not None:
-                self.pick_target_pose = [point_world[0], point_world[1], point_world[2]-0.005, 1.0, 0.0, 0.0, 0.0]  
+                self.pick_target_pose = [point_world[0], point_world[1], point_world[2]-0.01, 1.0, 0.0, 0.0, 0.0]  
                 self.get_logger().info(f"Target pose calculated: {self.pick_target_pose}")
         
         if self.last_green_pixel is not None:
@@ -290,7 +290,7 @@ class PickPlace(Node):
 
     def execute_pick_and_place(self, pick_up_target_pose, place_target_pose):
         self.publish_pose(pick_up_target_pose)
-        self.publish_gripper_position(1.0)
+        self.publish_gripper_position(0.65)
         self.publish_pose(place_target_pose)
         self.publish_gripper_position(0.0)
         self.publish_pose(self.origin_pose)
