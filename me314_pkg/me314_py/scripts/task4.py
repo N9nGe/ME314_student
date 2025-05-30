@@ -101,10 +101,10 @@ class PickPlace(Node):
         # Save the image for testing
         # cv2.imwrite('image_rgb.png', rgb_image)
 
-        # get the center of the grey box
-        grey_center = self.color_box_segmentation(raw_image, 'yellow')
-        if grey_center is not None:
-            cx, cy = grey_center
+        # get the center of the dollor and green box
+        dollor_center = self.color_box_segmentation(raw_image, 'yellow')
+        if dollor_center is not None:
+            cx, cy = dollor_center
             self.get_logger().info(f"grey object center: ({cx}, {cy})")
 
             # Test code
@@ -226,46 +226,6 @@ class PickPlace(Node):
         
         self.get_logger().info(f"Published gripper command to queue: {gripper_pos:.2f}")
 
-    def rectangle_based_segmentation(self, rgb_image):
-        # 转为灰度图
-        gray = cv2.cvtColor(rgb_image, cv2.COLOR_RGB2GRAY)
-        cv2.imwrite("gray.png", gray)
-        # 高斯模糊去噪
-        blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-        # 边缘检测
-        edges = cv2.Canny(blurred, threshold1=50, threshold2=150)
-        # 查找轮廓
-        contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        if not contours:
-            self.get_logger().warn("No contours found")
-            return None
-        # 筛选近似为矩形的轮廓
-        rectangles = []
-        for contour in contours:
-            epsilon = 0.02 * cv2.arcLength(contour, True)
-            approx = cv2.approxPolyDP(contour, epsilon, True)
-            if len(approx) == 4 and cv2.isContourConvex(approx):
-                area = cv2.contourArea(approx)
-                if area > 100:  # 忽略太小的区域
-                    rectangles.append(approx)
-        if not rectangles:
-            self.get_logger().warn("No rectangles detected")
-            return None
-        # 选择最大矩形
-        print(len(rectangles))
-        rectangles.sort(key=lambda x: x[0], reverse=True)
-        second_largest_rectangle = rectangles[1][1]  # [1] 是第二大的
-        M = cv2.moments(second_largest_rectangle)
-        if M["m00"] == 0:
-            return None
-        cx = int(M["m10"] / M["m00"])
-        cy = int(M["m01"] / M["m00"])
-        # 可选：保存调试图像
-        debug_image = rgb_image.copy()
-        cv2.drawContours(debug_image, [second_largest_rectangle], -1, (0, 255, 0), 2)
-        cv2.imwrite("rectangle_debug.png", debug_image)
-        return (cx, cy)
-
     def color_box_segmentation(self, rgb_image, color='green'):
         # Convert RGB image to HSV
         hsv_image = cv2.cvtColor(rgb_image, cv2.COLOR_RGB2HSV)
@@ -278,9 +238,13 @@ class PickPlace(Node):
             mask_name = "green_mask_hsv.png"
         
         elif color == 'yellow':
-            lower = np.array([0, 7, 135])
-            upper = np.array([25, 41, 196])
+            lower = np.array([15, 30, 60])
+            upper = np.array([35, 150, 220])
             mask = cv2.inRange(hsv_image, lower, upper)
+
+            kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
+            mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+            mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
 
             mask_name = "yellow_mask_hsv.png"
         else:

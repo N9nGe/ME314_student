@@ -250,11 +250,11 @@ class PickPlace(Node):
             self.get_logger().warn("No circles detected")
             return None
 
-        # 取第一个圆（默认取最大的）
+        # get the largest circle
         circles = np.round(circles[0, :]).astype("int")
         x, y, r = circles[0]
 
-        # 可选：保存调试图像
+        # debug
         mask = np.zeros_like(gray_image, dtype=np.uint8)
         cv2.circle(mask, (x, y), r, 255, thickness=-1)
         cv2.imwrite("circle_mask.png", mask)
